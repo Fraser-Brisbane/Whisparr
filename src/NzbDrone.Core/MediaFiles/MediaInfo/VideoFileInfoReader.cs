@@ -14,6 +14,7 @@ namespace NzbDrone.Core.MediaFiles.MediaInfo
     public interface IVideoFileInfoReader
     {
         MediaInfoModel GetMediaInfo(string filename);
+        MediaInfoProbeResult ProbeMediaInfo(string filename);
         TimeSpan? GetRunTime(string filename);
     }
 
@@ -21,6 +22,7 @@ namespace NzbDrone.Core.MediaFiles.MediaInfo
     {
         private readonly IDiskProvider _diskProvider;
         private readonly IConfigService _configService;
+        private readonly IFFProbeSelfCheck _ffprobeSelfCheck;
         private readonly Logger _logger;
         private readonly List<FFProbePixelFormat> _pixelFormats;
 
@@ -32,10 +34,11 @@ namespace NzbDrone.Core.MediaFiles.MediaInfo
         private static readonly string[] PqTransferFunctions = { "smpte2084" };
         private static readonly string[] ValidHdrTransferFunctions = HlgTransferFunctions.Concat(PqTransferFunctions).ToArray();
 
-        public VideoFileInfoReader(IDiskProvider diskProvider, IConfigService configService, Logger logger)
+        public VideoFileInfoReader(IDiskProvider diskProvider, IConfigService configService, IFFProbeSelfCheck ffprobeSelfCheck, Logger logger)
         {
             _diskProvider = diskProvider;
             _configService = configService;
+            _ffprobeSelfCheck = ffprobeSelfCheck;
             _logger = logger;
 
             // We bundle ffprobe for all platforms
@@ -54,6 +57,11 @@ namespace NzbDrone.Core.MediaFiles.MediaInfo
 
         public MediaInfoModel GetMediaInfo(string filename)
         {
+            return ProbeMediaInfo(filename).MediaInfo;
+        }
+
+        public MediaInfoProbeResult ProbeMediaInfo(string filename)
+        {
             if (!_diskProvider.FileExists(filename))
             {
                 throw new FileNotFoundException("Media file does not exist: " + filename);
@@ -61,7 +69,7 @@ namespace NzbDrone.Core.MediaFiles.MediaInfo
 
             if (MediaFileExtensions.DiskExtensions.Contains(Path.GetExtension(filename)))
             {
-                return null;
+                return new MediaInfoProbeResult(null, MediaProbeOutcome.NotProbed);
             }
 
             // TODO: Cache media info by path, mtime and length so we don't need to read files multiple times
@@ -133,23 +141,50 @@ namespace NzbDrone.Core.MediaFiles.MediaInfo
                 var sideData = streamSideData.Concat(framesSideData).ToList();
                 mediaInfoModel.VideoHdrFormat = GetHdrFormat(mediaInfoModel.VideoBitDepth, mediaInfoModel.VideoColourPrimaries, mediaInfoModel.VideoTransferCharacteristics, sideData);
 
-                return mediaInfoModel;
+                return new MediaInfoProbeResult(mediaInfoModel, MediaProbeOutcome.Succeeded);
             }
             catch (FFMpegException ex)
             {
                 _logger.Error(ex, "Unable to parse media info from file: {0}", filename);
+
+                var outcome = IsContentRejection(filename) ? MediaProbeOutcome.Corrupt : MediaProbeOutcome.Failed;
+
                 if (_configService.WhisparrCorruptFileDetection)
                 {
                     // return as a bad duration of -1 minute
-                    return new MediaInfoModel() { RunTime = new TimeSpan(0, -1, 0) };
+                    return new MediaInfoProbeResult(new MediaInfoModel() { RunTime = new TimeSpan(0, -1, 0) }, outcome);
                 }
+
+                return new MediaInfoProbeResult(null, outcome);
             }
             catch (Exception ex)
             {
                 _logger.Error(ex, "Unable to parse media info from file: {0}", filename);
             }
 
-            return null;
+            return new MediaInfoProbeResult(null, MediaProbeOutcome.Failed);
+        }
+
+        // ffprobe ran and rejected the input only if ffprobe itself is healthy (a non-zero exit such as 127 from
+        // missing libraries is also an FFMpegException) and Whisparr can read the file (rules out permission/IO errors).
+        private bool IsContentRejection(string filename)
+        {
+            if (!_ffprobeSelfCheck.IsHealthy())
+            {
+                return false;
+            }
+
+            try
+            {
+                using var stream = _diskProvider.OpenReadStream(filename);
+
+                return stream.ReadByte() >= 0;
+            }
+            catch (Exception ex)
+            {
+                _logger.Warn(ex, "Unable to read file {0}, not treating it as corrupt", filename);
+                return false;
+            }
         }
 
         public TimeSpan? GetRunTime(string filename)

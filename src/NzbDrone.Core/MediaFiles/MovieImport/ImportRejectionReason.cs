@@ -26,5 +26,6 @@ public enum ImportRejectionReason
     MultiPartMovie,
     NotQualityUpgrade,
     NotRevisionUpgrade,
-    NotCustomFormatUpgrade
+    NotCustomFormatUpgrade,
+    CorruptFile
 }

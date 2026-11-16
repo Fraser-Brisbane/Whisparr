@@ -171,6 +171,10 @@ namespace NzbDrone.Core.Download
                     return;
                 }
             }
+            else if (_rejectedImportService.FailIfAllPermanent(trackedDownload, importResults))
+            {
+                return;
+            }
 
             var statusMessages = new List<TrackedDownloadStatusMessage>
                                  {
