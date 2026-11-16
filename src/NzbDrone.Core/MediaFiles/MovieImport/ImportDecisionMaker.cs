@@ -283,24 +283,22 @@ namespace NzbDrone.Core.MediaFiles.MovieImport
                     decision = GetDecision(localMovie, downloadClientItem);
                 }
 
-                if (localMovie.MediaInfo?.RunTime != null && localMovie.MediaInfo.RunTime.TotalMinutes != 0 && localMovie.Movie.MovieMetadata.Value.Runtime > 0)
+                if (localMovie.MediaProbeOutcome == MediaProbeOutcome.Corrupt)
                 {
-                    var runtime = localMovie.MediaInfo.RunTime.TotalMinutes;
-                    var limit = _configService.WhisparrValidateRuntimeLimit;
-
-                    if (runtime < localMovie.Movie.MovieMetadata.Value.Runtime - limit || runtime > localMovie.Movie.MovieMetadata.Value.Runtime + limit)
+                    decision = GetCorruptFileDecision(localMovie, decision);
+                }
+                else if (IsRuntimeMismatch(localMovie, out var runtime))
+                {
+                    var rejection = $"Runtime of {localMovie.Movie.MovieMetadata.Value.Runtime} expected but {runtime} Found";
+                    if (runtime == -1)
                     {
-                        var rejection = $"Runtime of {localMovie.Movie.MovieMetadata.Value.Runtime} expected but {runtime} Found";
-                        if (runtime == -1)
-                        {
-                            rejection = "Corrupt file detected as Media Information was not able to be extracted.";
-                        }
+                        rejection = "Corrupt file detected as Media Information was not able to be extracted.";
+                    }
 
-                        _logger.Warn($"{rejection} for {localMovie.Movie.ToString()}");
-                        if (_configService.WhisparrValidateRuntime)
-                        {
-                            decision = new ImportDecision(localMovie, new ImportRejection(ImportRejectionReason.Error, $"Runtime of {localMovie.Movie.MovieMetadata.Value.Runtime} expected but {runtime} Found"));
-                        }
+                    _logger.Warn($"{rejection} for {localMovie.Movie.ToString()}");
+                    if (_configService.WhisparrValidateRuntime)
+                    {
+                        decision = new ImportDecision(localMovie, new ImportRejection(ImportRejectionReason.Error, $"Runtime of {localMovie.Movie.MovieMetadata.Value.Runtime} expected but {runtime} Found"));
                     }
                 }
             }
@@ -329,6 +327,46 @@ namespace NzbDrone.Core.MediaFiles.MovieImport
             }
 
             return decision;
+        }
+
+        private bool IsRuntimeMismatch(LocalMovie localMovie, out double runtime)
+        {
+            runtime = 0;
+
+            if (localMovie.MediaInfo?.RunTime == null || localMovie.MediaInfo.RunTime.TotalMinutes == 0 || localMovie.Movie.MovieMetadata.Value.Runtime <= 0)
+            {
+                return false;
+            }
+
+            runtime = localMovie.MediaInfo.RunTime.TotalMinutes;
+            var limit = _configService.WhisparrValidateRuntimeLimit;
+            var expected = localMovie.Movie.MovieMetadata.Value.Runtime;
+
+            return runtime < expected - limit || runtime > expected + limit;
+        }
+
+        // ffprobe ran, is healthy, and rejected a readable file. The rejections that only exist because the probe failed
+        // (Sample / SampleIndeterminate, and the runtime-mismatch Error raised by the -1min sentinel) are replaced by a
+        // single CorruptFile rejection, so the reason no longer depends on WhisparrCorruptFileDetection. Other rejections
+        // are kept, and a file that would otherwise be approved is not newly rejected.
+        private ImportDecision GetCorruptFileDecision(LocalMovie localMovie, ImportDecision decision)
+        {
+            var rejections = decision?.Rejections.ToList() ?? new List<ImportRejection>();
+            var runtimeRejected = _configService.WhisparrValidateRuntime && IsRuntimeMismatch(localMovie, out _);
+
+            if (rejections.Empty() && !runtimeRejected)
+            {
+                return decision;
+            }
+
+            _logger.Warn("Corrupt file detected, ffprobe was not able to read media information from {0}", localMovie.Path);
+
+            var remaining = rejections
+                .Where(r => r.Reason != ImportRejectionReason.Sample && r.Reason != ImportRejectionReason.SampleIndeterminate)
+                .Append(new ImportRejection(ImportRejectionReason.CorruptFile, "Corrupt file, ffprobe was not able to read media information"))
+                .ToArray();
+
+            return new ImportDecision(localMovie, remaining);
         }
 
         private ImportRejection EvaluateSpec(IImportDecisionEngineSpecification spec, LocalMovie localMovie, DownloadClientItem downloadClientItem)

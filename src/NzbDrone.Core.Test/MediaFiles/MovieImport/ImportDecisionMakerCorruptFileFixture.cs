@@ -194,6 +194,9 @@ namespace NzbDrone.Core.Test.MediaFiles.MovieImport
 
             Reasons(decision).Should().Equal(ImportRejectionReason.Sample);
             IsPermanent(decision).Should().BeTrue();
+
+            // The runtime-mismatch warning is logged even when runtime validation is off
+            ExceptionVerification.IgnoreWarns();
         }
 
         [Test]
