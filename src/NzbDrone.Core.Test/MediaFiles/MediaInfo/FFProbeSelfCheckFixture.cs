@@ -1,4 +1,5 @@
 using System;
+using FFMpegCore;
 using FluentAssertions;
 using Moq;
 using NUnit.Framework;
@@ -6,6 +7,7 @@ using NzbDrone.Common.Processes;
 using NzbDrone.Core.MediaFiles.MediaInfo;
 using NzbDrone.Core.Test.Framework;
 using NzbDrone.Test.Common;
+using NzbDrone.Test.Common.Categories;
 
 namespace NzbDrone.Core.Test.MediaFiles.MediaInfo
 {
@@ -72,6 +74,17 @@ namespace NzbDrone.Core.Test.MediaFiles.MediaInfo
             Mocker.GetMock<IProcessProvider>()
                   .Verify(s => s.StartAndCapture(It.IsAny<string>(), "-version", null), Times.Once());
             ExceptionVerification.IgnoreWarns();
+        }
+
+        [Test]
+        [DiskAccessTest]
+        public void TestR3_bundled_ffprobe_passes_the_self_check()
+        {
+            // Same binary location VideoFileInfoReader configures
+            GlobalFFOptions.Configure(options => options.BinaryFolder = AppDomain.CurrentDomain.BaseDirectory);
+            Mocker.SetConstant<IProcessProvider>(Mocker.Resolve<ProcessProvider>());
+
+            Subject.IsHealthy().Should().BeTrue();
         }
     }
 }
