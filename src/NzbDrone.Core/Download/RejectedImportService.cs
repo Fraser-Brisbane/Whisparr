@@ -52,6 +52,10 @@ public class RejectedImportService : IRejectedImportService
             _logger.Trace("Download '{0}' contains executable file, marking as failed", trackedDownload.DownloadItem.Title);
             trackedDownload.Fail();
         }
+        else if (PermanentImportRejection.AreAllPermanent(new[] { importResult }, indexerSettings.FailDownloads))
+        {
+            FailPermanent(trackedDownload, new[] { importResult });
+        }
         else
         {
             trackedDownload.Warn(new TrackedDownloadStatusMessage(trackedDownload.DownloadItem.Title, importResult.Errors));
@@ -62,6 +66,28 @@ public class RejectedImportService : IRejectedImportService
 
     public bool FailIfAllPermanent(TrackedDownload trackedDownload, List<ImportResult> importResults)
     {
-        return false;
+        if (trackedDownload.RemoteMovie?.Release == null)
+        {
+            return false;
+        }
+
+        var indexerSettings = _cachedIndexerSettingsProvider.GetSettings(trackedDownload.RemoteMovie.Release.IndexerId);
+
+        if (indexerSettings == null || !PermanentImportRejection.AreAllPermanent(importResults, indexerSettings.FailDownloads))
+        {
+            return false;
+        }
+
+        FailPermanent(trackedDownload, importResults);
+
+        return true;
+    }
+
+    private void FailPermanent(TrackedDownload trackedDownload, IEnumerable<ImportResult> importResults)
+    {
+        var reasons = importResults.SelectMany(r => r.ImportDecision.Rejections).Select(r => r.Reason).Distinct();
+
+        _logger.Info("Download '{0}' can never be imported ({1}), marking as failed", trackedDownload.DownloadItem.Title, string.Join(", ", reasons));
+        trackedDownload.Fail();
     }
 }
