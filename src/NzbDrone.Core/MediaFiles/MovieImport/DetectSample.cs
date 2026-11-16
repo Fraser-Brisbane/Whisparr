@@ -10,6 +10,9 @@ namespace NzbDrone.Core.MediaFiles.MovieImport
     public interface IDetectSample
     {
         DetectSampleResult IsSample(MovieMetadata movie, string path);
+
+        // Uses the runtime of media info that was already probed for this file instead of probing again
+        DetectSampleResult IsSample(MovieMetadata movie, string path, MediaInfoModel probedMediaInfo);
     }
 
     public class DetectSample : IDetectSample
@@ -24,6 +27,11 @@ namespace NzbDrone.Core.MediaFiles.MovieImport
         }
 
         public DetectSampleResult IsSample(MovieMetadata movie, string path)
+        {
+            return IsSample(movie, path, null);
+        }
+
+        public DetectSampleResult IsSample(MovieMetadata movie, string path, MediaInfoModel probedMediaInfo)
         {
             var extension = Path.GetExtension(path);
 
@@ -48,8 +56,7 @@ namespace NzbDrone.Core.MediaFiles.MovieImport
                 }
             }
 
-            // TODO: Use MediaInfo from the import process, no need to re-process the file again here
-            var runTime = _videoFileInfoReader.GetRunTime(path);
+            var runTime = probedMediaInfo != null ? probedMediaInfo.RunTime : _videoFileInfoReader.GetRunTime(path);
 
             if (!runTime.HasValue)
             {
