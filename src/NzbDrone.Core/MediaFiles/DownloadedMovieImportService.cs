@@ -369,7 +369,7 @@ namespace NzbDrone.Core.MediaFiles
 
             if (dangerousFile != null)
             {
-                _logger.Warn("Found potentially dangerous file in {0}: {1}", folder, dangerousFile);
+                _logger.Debug("Found potentially dangerous file in {0}: {1}", folder, dangerousFile);
                 return RejectionResult(ImportRejectionReason.DangerousFile, $"Caution: Found potentially dangerous file: {Path.GetFileName(dangerousFile)}");
             }
 
@@ -377,7 +377,7 @@ namespace NzbDrone.Core.MediaFiles
 
             if (executableFile != null)
             {
-                _logger.Warn("Found executable file in {0}: {1}", folder, executableFile);
+                _logger.Debug("Found executable file in {0}: {1}", folder, executableFile);
                 return RejectionResult(ImportRejectionReason.ExecutableFile, $"Caution: Found executable file: {Path.GetFileName(executableFile)}");
             }
 
