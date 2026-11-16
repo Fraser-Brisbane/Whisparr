@@ -189,6 +189,16 @@ namespace NzbDrone.Core.MediaFiles
                 };
             }
 
+            // Check the whole folder before probing any video file: a release that ships an
+            // executable or other dangerous file next to its video (e.g. a "codec" Setup.exe
+            // bundle with a decoy video) must be rejected as a whole, not only when no video exists.
+            var dangerousFileResult = CheckForDangerousFiles(directoryInfo.FullName);
+
+            if (dangerousFileResult != null)
+            {
+                return new List<ImportResult> { dangerousFileResult };
+            }
+
             var cleanedUpName = GetCleanedUpFolderName(directoryInfo.Name);
             var historyItems = _historyService.FindByDownloadId(downloadClientItem?.DownloadId ?? "");
             var firstHistoryItem = historyItems?.OrderByDescending(h => h.Date).FirstOrDefault();
@@ -351,19 +361,32 @@ namespace NzbDrone.Core.MediaFiles
             return new ImportResult(new ImportDecision(null, new ImportRejection(reason, message)), message);
         }
 
-        private ImportResult CheckEmptyResultForIssue(string folder)
+        private ImportResult CheckForDangerousFiles(string folder)
         {
             var files = _diskProvider.GetFiles(folder, true);
 
-            if (files.Any(file => FileExtensions.DangerousExtensions.Contains(Path.GetExtension(file))))
+            var dangerousFile = files.FirstOrDefault(file => FileExtensions.DangerousExtensions.Contains(Path.GetExtension(file)));
+
+            if (dangerousFile != null)
             {
-                return RejectionResult(ImportRejectionReason.DangerousFile, "Caution: Found potentially dangerous file");
+                _logger.Warn("Found potentially dangerous file in {0}: {1}", folder, dangerousFile);
+                return RejectionResult(ImportRejectionReason.DangerousFile, $"Caution: Found potentially dangerous file: {Path.GetFileName(dangerousFile)}");
             }
 
-            if (files.Any(file => FileExtensions.ExecutableExtensions.Contains(Path.GetExtension(file))))
+            var executableFile = files.FirstOrDefault(file => FileExtensions.ExecutableExtensions.Contains(Path.GetExtension(file)));
+
+            if (executableFile != null)
             {
-                return RejectionResult(ImportRejectionReason.ExecutableFile, "Caution: Found executable file");
+                _logger.Warn("Found executable file in {0}: {1}", folder, executableFile);
+                return RejectionResult(ImportRejectionReason.ExecutableFile, $"Caution: Found executable file: {Path.GetFileName(executableFile)}");
             }
+
+            return null;
+        }
+
+        private ImportResult CheckEmptyResultForIssue(string folder)
+        {
+            var files = _diskProvider.GetFiles(folder, true);
 
             if (files.Any(file => FileExtensions.ArchiveExtensions.Contains(Path.GetExtension(file))))
             {
