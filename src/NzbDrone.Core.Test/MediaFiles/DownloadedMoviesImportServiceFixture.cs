@@ -495,6 +495,78 @@ namespace NzbDrone.Core.Test.MediaFiles
             result.First().Result.Should().Be(ImportResultType.Rejected);
         }
 
+        private void GivenFolderAlsoContains(string relativeFile)
+        {
+            var folder = _subFolders.First();
+            var extraFile = Path.Combine(folder, relativeFile.AsOsAgnostic());
+
+            Mocker.GetMock<IDiskProvider>()
+                .Setup(s => s.GetFiles(It.IsAny<string>(), true))
+                .Returns(_videoFiles.Concat(new[] { extraFile }).ToArray());
+        }
+
+        [TestCase("Codec\\Setup.exe")]
+        [TestCase("install.bat")]
+        [TestCase("run.sh")]
+        public void should_reject_folder_containing_video_and_executable_file(string executable)
+        {
+            GivenValidMovie();
+            GivenSuccessfulImport();
+            GivenFolderAlsoContains(executable);
+
+            var result = Subject.ProcessPath(_subFolders.First());
+
+            result.Should().HaveCount(1);
+            result.First().Result.Should().Be(ImportResultType.Rejected);
+            result.First().ImportDecision.Rejections.First().Reason.Should().Be(ImportRejectionReason.ExecutableFile);
+
+            Mocker.GetMock<IImportApprovedMovie>()
+                .Verify(c => c.Import(It.IsAny<List<ImportDecision>>(), It.IsAny<bool>(), It.IsAny<DownloadClientItem>(), It.IsAny<ImportMode>()), Times.Never());
+        }
+
+        [TestCase("Codec\\Play.lnk")]
+        [TestCase("player.scr")]
+        public void should_reject_folder_containing_video_and_potentially_dangerous_file(string dangerous)
+        {
+            GivenValidMovie();
+            GivenSuccessfulImport();
+            GivenFolderAlsoContains(dangerous);
+
+            var result = Subject.ProcessPath(_subFolders.First());
+
+            result.Should().HaveCount(1);
+            result.First().Result.Should().Be(ImportResultType.Rejected);
+            result.First().ImportDecision.Rejections.First().Reason.Should().Be(ImportRejectionReason.DangerousFile);
+
+            Mocker.GetMock<IImportApprovedMovie>()
+                .Verify(c => c.Import(It.IsAny<List<ImportDecision>>(), It.IsAny<bool>(), It.IsAny<DownloadClientItem>(), It.IsAny<ImportMode>()), Times.Never());
+        }
+
+        [Test]
+        public void should_not_probe_video_files_when_folder_contains_executable()
+        {
+            GivenValidMovie();
+            GivenFolderAlsoContains("Codec\\Setup.exe");
+
+            Subject.ProcessPath(_subFolders.First());
+
+            Mocker.GetMock<IMakeImportDecision>()
+                .Verify(c => c.GetImportDecisions(It.IsAny<List<string>>(), It.IsAny<Movie>(), It.IsAny<DownloadClientItem>(), It.IsAny<ParsedMovieInfo>(), It.IsAny<bool>()), Times.Never());
+        }
+
+        [Test]
+        public void should_import_folder_containing_video_and_harmless_extra_files()
+        {
+            GivenValidMovie();
+            GivenSuccessfulImport();
+            GivenFolderAlsoContains("If_you_get_error.txt");
+
+            var result = Subject.ProcessPath(_subFolders.First());
+
+            result.Should().HaveCount(1);
+            result.First().Result.Should().Be(ImportResultType.Imported);
+        }
+
         private void VerifyNoImport()
         {
             Mocker.GetMock<IImportApprovedMovie>().Verify(c => c.Import(It.IsAny<List<ImportDecision>>(), true, null, ImportMode.Auto),
