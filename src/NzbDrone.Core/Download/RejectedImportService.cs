@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Linq;
 using NLog;
 using NzbDrone.Core.Download.TrackedDownloads;
@@ -9,6 +10,7 @@ namespace NzbDrone.Core.Download;
 public interface IRejectedImportService
 {
     bool Process(TrackedDownload trackedDownload, ImportResult importResult);
+    bool FailIfAllPermanent(TrackedDownload trackedDownload, List<ImportResult> importResults);
 }
 
 public class RejectedImportService : IRejectedImportService
@@ -56,5 +58,10 @@ public class RejectedImportService : IRejectedImportService
         }
 
         return true;
+    }
+
+    public bool FailIfAllPermanent(TrackedDownload trackedDownload, List<ImportResult> importResults)
+    {
+        return false;
     }
 }

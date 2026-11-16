@@ -14,6 +14,7 @@ namespace NzbDrone.Core.MediaFiles.MediaInfo
     public interface IVideoFileInfoReader
     {
         MediaInfoModel GetMediaInfo(string filename);
+        MediaInfoProbeResult ProbeMediaInfo(string filename);
         TimeSpan? GetRunTime(string filename);
     }
 
@@ -21,6 +22,7 @@ namespace NzbDrone.Core.MediaFiles.MediaInfo
     {
         private readonly IDiskProvider _diskProvider;
         private readonly IConfigService _configService;
+        private readonly IFFProbeSelfCheck _ffprobeSelfCheck;
         private readonly Logger _logger;
         private readonly List<FFProbePixelFormat> _pixelFormats;
 
@@ -32,10 +34,11 @@ namespace NzbDrone.Core.MediaFiles.MediaInfo
         private static readonly string[] PqTransferFunctions = { "smpte2084" };
         private static readonly string[] ValidHdrTransferFunctions = HlgTransferFunctions.Concat(PqTransferFunctions).ToArray();
 
-        public VideoFileInfoReader(IDiskProvider diskProvider, IConfigService configService, Logger logger)
+        public VideoFileInfoReader(IDiskProvider diskProvider, IConfigService configService, IFFProbeSelfCheck ffprobeSelfCheck, Logger logger)
         {
             _diskProvider = diskProvider;
             _configService = configService;
+            _ffprobeSelfCheck = ffprobeSelfCheck;
             _logger = logger;
 
             // We bundle ffprobe for all platforms
@@ -150,6 +153,11 @@ namespace NzbDrone.Core.MediaFiles.MediaInfo
             }
 
             return null;
+        }
+
+        public MediaInfoProbeResult ProbeMediaInfo(string filename)
+        {
+            return new MediaInfoProbeResult(GetMediaInfo(filename), MediaProbeOutcome.NotProbed);
         }
 
         public TimeSpan? GetRunTime(string filename)
