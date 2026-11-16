@@ -1,5 +1,6 @@
 using NLog;
 using NzbDrone.Core.Download;
+using NzbDrone.Core.MediaFiles.MediaInfo;
 using NzbDrone.Core.Parser.Model;
 
 namespace NzbDrone.Core.MediaFiles.MovieImport.Specifications
@@ -24,7 +25,11 @@ namespace NzbDrone.Core.MediaFiles.MovieImport.Specifications
                 return ImportSpecDecision.Accept();
             }
 
-            var sample = _detectSample.IsSample(localMovie.Movie.MovieMetadata, localMovie.Path);
+            // Decide from the probe recorded on the file when it succeeded, so a Sample verdict and the probe outcome
+            // that makes it permanent (PermanentImportRejection) always describe the same probe. Otherwise probe again.
+            var sample = localMovie.MediaProbeOutcome == MediaProbeOutcome.Succeeded && localMovie.MediaInfo != null
+                ? _detectSample.IsSample(localMovie.Movie.MovieMetadata, localMovie.Path, localMovie.MediaInfo)
+                : _detectSample.IsSample(localMovie.Movie.MovieMetadata, localMovie.Path);
 
             if (sample == DetectSampleResult.Sample)
             {
