@@ -84,12 +84,16 @@ namespace NzbDrone.Core.MediaFiles.MediaInfo
             }
 
             _logger.Trace("GetMediaInfo path='{0}', movieFile.Path='{1}', movieFile.RelativePath='{2}'", path, movieFile.Path, movieFile.RelativePath);
-            var updatedMediaInfo = _videoFileInfoReader.GetMediaInfo(path);
+            var probe = _videoFileInfoReader.ProbeMediaInfo(path);
 
-            if (updatedMediaInfo == null)
+            // A failed or corrupt probe carries no real media info (with corrupt-file detection on it is the -1min
+            // sentinel), so keep what is already stored for the file.
+            if (probe?.Outcome != MediaProbeOutcome.Succeeded)
             {
                 return false;
             }
+
+            var updatedMediaInfo = probe.MediaInfo;
 
             movieFile.MediaInfo = updatedMediaInfo;
 

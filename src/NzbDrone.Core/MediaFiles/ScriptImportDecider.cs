@@ -204,7 +204,14 @@ namespace NzbDrone.Core.MediaFiles
 
             if (scriptImportInfo.Decision == ScriptImportDecision.RenameRequested)
             {
-                movieFile.MediaInfo = _videoFileInfoReader.GetMediaInfo(mediaFile);
+                var probe = _videoFileInfoReader.ProbeMediaInfo(mediaFile);
+
+                // Keep the media info recorded at import unless the script's output file probes successfully.
+                if (probe?.Outcome == MediaProbeOutcome.Succeeded)
+                {
+                    movieFile.MediaInfo = probe.MediaInfo;
+                }
+
                 movieFile.Path = null;
             }
 
