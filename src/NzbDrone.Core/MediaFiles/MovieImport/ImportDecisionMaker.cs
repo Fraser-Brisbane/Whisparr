@@ -169,7 +169,7 @@ namespace NzbDrone.Core.MediaFiles.MovieImport
 
                     unmappedFile.DateAdded = DateTime.UtcNow;
                     unmappedFile.Languages = new List<Languages.Language>();
-                    unmappedFile.MediaInfo = _videoFileInfoReader.GetMediaInfo(file.ToString());
+                    unmappedFile.MediaInfo = GetSuccessfulMediaInfo(file.ToString());
                     unmappedFile.OriginalFilePath = file.ToString();
                     unmappedFile.Size = _diskProvider.GetFileSize(file.ToString());
 
@@ -202,6 +202,14 @@ namespace NzbDrone.Core.MediaFiles.MovieImport
                                          .Where(c => c != null);
 
             return new ImportDecision(localMovie, reasons.ToArray());
+        }
+
+        // Only a successful probe is real media info; a failed or corrupt one may be the -1min sentinel.
+        private MediaInfoModel GetSuccessfulMediaInfo(string file)
+        {
+            var probe = _videoFileInfoReader.ProbeMediaInfo(file);
+
+            return probe?.Outcome == MediaProbeOutcome.Succeeded ? probe.MediaInfo : null;
         }
 
         private Movie GetRemoteMovie(string file)

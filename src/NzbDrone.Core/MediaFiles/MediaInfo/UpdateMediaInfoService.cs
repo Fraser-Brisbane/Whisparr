@@ -84,14 +84,16 @@ namespace NzbDrone.Core.MediaFiles.MediaInfo
             }
 
             _logger.Trace("GetMediaInfo path='{0}', movieFile.Path='{1}', movieFile.RelativePath='{2}'", path, movieFile.Path, movieFile.RelativePath);
-            var updatedMediaInfo = _videoFileInfoReader.GetMediaInfo(path);
+            var probe = _videoFileInfoReader.ProbeMediaInfo(path);
 
-            if (updatedMediaInfo == null)
+            // A failed or corrupt probe carries no real media info (with corrupt-file detection on it is the -1min
+            // sentinel), so keep what is already stored for the file.
+            if (probe?.Outcome != MediaProbeOutcome.Succeeded)
             {
                 return false;
             }
 
-            movieFile.MediaInfo = updatedMediaInfo;
+            movieFile.MediaInfo = probe.MediaInfo;
 
             var localMovie = new LocalMovie();
             localMovie.Path = movieFile.Path;
@@ -99,7 +101,7 @@ namespace NzbDrone.Core.MediaFiles.MediaInfo
 
             // Try re-check for Quality rather than defaulting to null/Unknown
             localMovie.Quality = QualityParser.ParseQuality(movieFile.RelativePath);
-            localMovie.MediaInfo = updatedMediaInfo;
+            localMovie.MediaInfo = probe.MediaInfo;
 
             localMovie = _augmentQuality.Aggregate(localMovie, null);
 
