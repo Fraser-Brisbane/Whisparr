@@ -17,7 +17,7 @@ using NzbDrone.Test.Common;
 
 namespace NzbDrone.Core.Test.MediaFiles
 {
-    // FRAS-264: when the import script asks for a rename, the file is re-probed. Only a successful probe may
+    // When the import script asks for a rename, the file is re-probed. Only a successful probe may
     // replace the media info recorded at import; a failed or corrupt probe (the -1min sentinel) must not.
     [TestFixture]
     public class ScriptImportDeciderProbeFixture : CoreTest<ImportScriptService>

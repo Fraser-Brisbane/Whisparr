@@ -16,7 +16,7 @@ using NzbDrone.Test.Common;
 
 namespace NzbDrone.Core.Test.MediaFiles.MovieImport
 {
-    // FRAS-264: a scene file that can't be matched is saved as an unmapped file. A failed or corrupt probe
+    // A scene file that can't be matched is saved as an unmapped file. A failed or corrupt probe
     // (the -1min sentinel) must not be stored as its media info.
     [TestFixture]
     public class ImportDecisionMakerUnmappedProbeFixture : CoreTest<ImportDecisionMaker>

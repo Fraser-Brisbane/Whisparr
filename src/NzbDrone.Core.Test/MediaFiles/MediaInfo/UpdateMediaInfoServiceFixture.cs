@@ -325,7 +325,7 @@ namespace NzbDrone.Core.Test.MediaFiles.MediaInfo
                 .Verify(v => v.Update(movieFile), Times.Never());
         }
 
-        // FRAS-264: with corrupt-file detection on, a failed probe (e.g. ffprobe itself is broken) returns the
+        // With corrupt-file detection on, a failed probe (e.g. ffprobe itself is broken) returns the
         // -1min sentinel. A rescan must keep the valid media info already stored for the file.
         [TestCase(MediaProbeOutcome.Failed)]
         [TestCase(MediaProbeOutcome.Corrupt)]

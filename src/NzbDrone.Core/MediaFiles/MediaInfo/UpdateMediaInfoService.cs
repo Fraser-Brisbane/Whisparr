@@ -93,9 +93,7 @@ namespace NzbDrone.Core.MediaFiles.MediaInfo
                 return false;
             }
 
-            var updatedMediaInfo = probe.MediaInfo;
-
-            movieFile.MediaInfo = updatedMediaInfo;
+            movieFile.MediaInfo = probe.MediaInfo;
 
             var localMovie = new LocalMovie();
             localMovie.Path = movieFile.Path;
@@ -103,7 +101,7 @@ namespace NzbDrone.Core.MediaFiles.MediaInfo
 
             // Try re-check for Quality rather than defaulting to null/Unknown
             localMovie.Quality = QualityParser.ParseQuality(movieFile.RelativePath);
-            localMovie.MediaInfo = updatedMediaInfo;
+            localMovie.MediaInfo = probe.MediaInfo;
 
             localMovie = _augmentQuality.Aggregate(localMovie, null);
 
