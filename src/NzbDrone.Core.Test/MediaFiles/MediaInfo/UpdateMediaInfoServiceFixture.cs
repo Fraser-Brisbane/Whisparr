@@ -60,6 +60,18 @@ namespace NzbDrone.Core.Test.MediaFiles.MediaInfo
                   .Returns((MediaInfoModel)null);
         }
 
+        // Mirrors VideoFileInfoReader: GetMediaInfo is ProbeMediaInfo(...).MediaInfo.
+        private void GivenProbe(string path, MediaInfoModel mediaInfo, MediaProbeOutcome outcome)
+        {
+            Mocker.GetMock<IVideoFileInfoReader>()
+                  .Setup(v => v.ProbeMediaInfo(path))
+                  .Returns(new MediaInfoProbeResult(mediaInfo, outcome));
+
+            Mocker.GetMock<IVideoFileInfoReader>()
+                  .Setup(v => v.GetMediaInfo(path))
+                  .Returns(mediaInfo);
+        }
+
         [Test]
         public void should_skip_up_to_date_media_info()
         {
@@ -318,6 +330,38 @@ namespace NzbDrone.Core.Test.MediaFiles.MediaInfo
 
             Mocker.GetMock<IMediaFileService>()
                 .Verify(v => v.Update(movieFile), Times.Never());
+        }
+
+        // FRAS-264: with corrupt-file detection on, a failed probe (e.g. ffprobe itself is broken) returns the
+        // -1min sentinel. A rescan must keep the valid media info already stored for the file.
+        [TestCase(MediaProbeOutcome.Failed)]
+        [TestCase(MediaProbeOutcome.Corrupt)]
+        public void should_keep_stored_media_info_when_probe_returns_sentinel(MediaProbeOutcome outcome)
+        {
+            var path = Path.Combine(_movie.Path, "media.mkv");
+            var storedMediaInfo = new MediaInfoModel
+            {
+                Width = 1920,
+                Height = 1080,
+                RunTime = System.TimeSpan.FromMinutes(30),
+                SchemaRevision = VideoFileInfoReader.CURRENT_MEDIA_INFO_SCHEMA_REVISION
+            };
+
+            var movieFile = Builder<MovieFile>.CreateNew()
+                .With(v => v.Path = path)
+                .With(v => v.RelativePath = "media.mkv")
+                .With(e => e.MediaInfo = storedMediaInfo)
+                .Build();
+
+            GivenFileExists();
+            GivenProbe(path, new MediaInfoModel { RunTime = System.TimeSpan.FromMinutes(-1) }, outcome);
+
+            Subject.Update(movieFile, _movie).Should().BeFalse();
+
+            movieFile.MediaInfo.Should().BeSameAs(storedMediaInfo);
+
+            Mocker.GetMock<IMediaFileService>()
+                .Verify(v => v.Update(It.IsAny<MovieFile>()), Times.Never());
         }
 
         [Test]
