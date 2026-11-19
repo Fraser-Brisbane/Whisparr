@@ -11,8 +11,9 @@ namespace NzbDrone.Core.MediaFiles.MovieImport
     {
         DetectSampleResult IsSample(MovieMetadata movie, string path);
 
-        // Uses the runtime of media info that was already probed for this file instead of probing again
-        DetectSampleResult IsSample(MovieMetadata movie, string path, MediaInfoModel probedMediaInfo);
+        // Decides from the caller's probe of this file instead of probing again. probe is only called when the
+        // runtime is needed, and its result is used whatever the outcome.
+        DetectSampleResult IsSample(MovieMetadata movie, string path, Func<MediaInfoProbeResult> probe);
     }
 
     public class DetectSample : IDetectSample
@@ -28,10 +29,16 @@ namespace NzbDrone.Core.MediaFiles.MovieImport
 
         public DetectSampleResult IsSample(MovieMetadata movie, string path)
         {
-            return IsSample(movie, path, null);
+            return IsSample(movie, path, () => _videoFileInfoReader.GetRunTime(path), LogLevel.Error);
         }
 
-        public DetectSampleResult IsSample(MovieMetadata movie, string path, MediaInfoModel probedMediaInfo)
+        // The reader has already logged why the caller's probe failed, so a missing runtime is only logged at Debug.
+        public DetectSampleResult IsSample(MovieMetadata movie, string path, Func<MediaInfoProbeResult> probe)
+        {
+            return IsSample(movie, path, () => probe()?.MediaInfo?.RunTime, LogLevel.Debug);
+        }
+
+        private DetectSampleResult IsSample(MovieMetadata movie, string path, Func<TimeSpan?> getRunTime, LogLevel missingRunTimeLevel)
         {
             var extension = Path.GetExtension(path);
 
@@ -56,11 +63,11 @@ namespace NzbDrone.Core.MediaFiles.MovieImport
                 }
             }
 
-            var runTime = probedMediaInfo != null ? probedMediaInfo.RunTime : _videoFileInfoReader.GetRunTime(path);
+            var runTime = getRunTime();
 
             if (!runTime.HasValue)
             {
-                _logger.Error("Failed to get runtime from the file, make sure ffprobe is available");
+                _logger.Log(missingRunTimeLevel, "Failed to get runtime from the file, make sure ffprobe is available");
                 return DetectSampleResult.Indeterminate;
             }
 
