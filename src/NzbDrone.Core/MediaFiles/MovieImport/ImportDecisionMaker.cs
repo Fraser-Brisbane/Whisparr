@@ -101,25 +101,26 @@ namespace NzbDrone.Core.MediaFiles.MovieImport
                 downloadClientItemInfo = Parser.Parser.ParseMovieTitle(downloadClientItem.Title);
             }
 
-            var nonSampleVideoFileCount = GetNonSampleVideoFileCount(newFiles, movie.MovieMetadata);
+            var localMovies = newFiles.Select(file => new LocalMovie
+            {
+                Movie = movie,
+                DownloadClientMovieInfo = downloadClientItemInfo,
+                DownloadItem = downloadClientItem,
+                FolderMovieInfo = folderInfo,
+                Path = file,
+                SceneSource = sceneSource,
+                ExistingFile = movie.Path.IsParentPath(file)
+            }).ToList();
+
+            var otherVideoFiles = GetNonSampleVideoFileCount(localMovies, movie.MovieMetadata) > 1;
 
             var decisions = new List<ImportDecision>();
 
-            foreach (var file in newFiles)
+            foreach (var localMovie in localMovies)
             {
-                var localMovie = new LocalMovie
-                {
-                    Movie = movie,
-                    DownloadClientMovieInfo = downloadClientItemInfo,
-                    DownloadItem = downloadClientItem,
-                    FolderMovieInfo = folderInfo,
-                    Path = file,
-                    SceneSource = sceneSource,
-                    ExistingFile = movie.Path.IsParentPath(file),
-                    OtherVideoFiles = nonSampleVideoFileCount > 1
-                };
+                localMovie.OtherVideoFiles = otherVideoFiles;
 
-                decisions.AddIfNotNull(GetDecision(localMovie, downloadClientItem, nonSampleVideoFileCount > 1));
+                decisions.AddIfNotNull(GetDecision(localMovie, downloadClientItem, otherVideoFiles));
             }
 
             return decisions;
@@ -169,12 +170,15 @@ namespace NzbDrone.Core.MediaFiles.MovieImport
 
                     unmappedFile.DateAdded = DateTime.UtcNow;
                     unmappedFile.Languages = new List<Languages.Language>();
-                    unmappedFile.MediaInfo = GetSuccessfulMediaInfo(file.ToString());
+                    var probe = _videoFileInfoReader.ProbeMediaInfo(file.ToString());
+
+                    unmappedFile.MediaInfo = GetSuccessfulMediaInfo(probe);
                     unmappedFile.OriginalFilePath = file.ToString();
                     unmappedFile.Size = _diskProvider.GetFileSize(file.ToString());
 
                     localMovie.Movie.MovieFile = unmappedFile;
                     localMovie.Path = file.ToString();
+                    localMovie.MediaInfoProbe = probe;
 
                     // Augment movie file so imported files have all additional information an automatic import would
                     localMovie = _aggregationService.Augment(localMovie, null);
@@ -205,10 +209,8 @@ namespace NzbDrone.Core.MediaFiles.MovieImport
         }
 
         // Only a successful probe is real media info; a failed or corrupt one may be the -1min sentinel.
-        private MediaInfoModel GetSuccessfulMediaInfo(string file)
+        private static MediaInfoModel GetSuccessfulMediaInfo(MediaInfoProbeResult probe)
         {
-            var probe = _videoFileInfoReader.ProbeMediaInfo(file);
-
             return probe?.Outcome == MediaProbeOutcome.Succeeded ? probe.MediaInfo : null;
         }
 
@@ -402,11 +404,12 @@ namespace NzbDrone.Core.MediaFiles.MovieImport
             return null;
         }
 
-        private int GetNonSampleVideoFileCount(List<string> videoFiles, MovieMetadata movie)
+        // Probes each file at most once and keeps the probe on the LocalMovie for Augment to reuse
+        private int GetNonSampleVideoFileCount(List<LocalMovie> localMovies, MovieMetadata movie)
         {
-            return videoFiles.Count(file =>
+            return localMovies.Count(localMovie =>
             {
-                var sample = _detectSample.IsSample(movie, file);
+                var sample = _detectSample.IsSample(movie, localMovie.Path, () => localMovie.MediaInfoProbe ??= _videoFileInfoReader.ProbeMediaInfo(localMovie.Path));
 
                 if (sample == DetectSampleResult.Sample)
                 {

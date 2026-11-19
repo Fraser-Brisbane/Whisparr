@@ -126,9 +126,9 @@ namespace NzbDrone.Core.Test.MediaFiles.MovieImport
 
             GetDecision();
 
-            // GetNonSampleVideoFileCount still runs before any file is probed; the spec itself must not re-probe.
+            // The non-sample count, Augment and the spec share one probe of the file.
             Mocker.GetMock<IVideoFileInfoReader>().Verify(s => s.ProbeMediaInfo(It.IsAny<string>()), Times.Once());
-            Mocker.GetMock<IVideoFileInfoReader>().Verify(s => s.GetRunTime(It.IsAny<string>()), Times.Once());
+            Mocker.GetMock<IVideoFileInfoReader>().Verify(s => s.GetRunTime(It.IsAny<string>()), Times.Never());
             ExceptionVerification.IgnoreWarns();
             ExceptionVerification.IgnoreErrors();
         }
