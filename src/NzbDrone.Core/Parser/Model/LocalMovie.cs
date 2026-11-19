@@ -29,6 +29,10 @@ namespace NzbDrone.Core.Parser.Model
         public IndexerFlags IndexerFlags { get; set; }
         public MediaInfoModel MediaInfo { get; set; }
         public MediaProbeOutcome MediaProbeOutcome { get; set; }
+
+        // The probe of Path taken during the current import decision run, so the file is probed once per run.
+        // Never carried over to another run.
+        public MediaInfoProbeResult MediaInfoProbe { get; set; }
         public bool ExistingFile { get; set; }
         public bool SceneSource { get; set; }
         public string ReleaseGroup { get; set; }

@@ -63,8 +63,9 @@ namespace NzbDrone.Core.MediaFiles.MovieImport.Aggregation
 
             if (isMediaFile && (!localMovie.ExistingFile || _configService.EnableMediaInfo))
             {
-                var probe = _videoFileInfoReader.ProbeMediaInfo(localMovie.Path);
+                var probe = localMovie.MediaInfoProbe ?? _videoFileInfoReader.ProbeMediaInfo(localMovie.Path);
 
+                localMovie.MediaInfoProbe = probe;
                 localMovie.MediaInfo = probe?.MediaInfo;
                 localMovie.MediaProbeOutcome = probe?.Outcome ?? MediaProbeOutcome.NotProbed;
             }
