@@ -32,7 +32,8 @@ public class RejectedImportService : IRejectedImportService
         }
 
         var indexerSettings = _cachedIndexerSettingsProvider.GetSettings(trackedDownload.RemoteMovie.Release.IndexerId);
-        var rejectionReason = importResult.ImportDecision.Rejections.FirstOrDefault()?.Reason;
+        var rejection = importResult.ImportDecision.Rejections.FirstOrDefault();
+        var rejectionReason = rejection?.Reason;
 
         if (indexerSettings == null)
         {
@@ -44,13 +45,13 @@ public class RejectedImportService : IRejectedImportService
             indexerSettings.FailDownloads.Contains(FailDownloads.PotentiallyDangerous))
         {
             _logger.Trace("Download '{0}' contains potentially dangerous file, marking as failed", trackedDownload.DownloadItem.Title);
-            trackedDownload.Fail();
+            trackedDownload.Fail(rejection.Message);
         }
         else if (rejectionReason == ImportRejectionReason.ExecutableFile &&
             indexerSettings.FailDownloads.Contains(FailDownloads.Executables))
         {
             _logger.Trace("Download '{0}' contains executable file, marking as failed", trackedDownload.DownloadItem.Title);
-            trackedDownload.Fail();
+            trackedDownload.Fail(rejection.Message);
         }
         else if (PermanentImportRejection.AreAllPermanent(new[] { importResult }, indexerSettings.FailDownloads))
         {
@@ -85,9 +86,11 @@ public class RejectedImportService : IRejectedImportService
 
     private void FailPermanent(TrackedDownload trackedDownload, IEnumerable<ImportResult> importResults)
     {
-        var reasons = importResults.SelectMany(r => r.ImportDecision.Rejections).Select(r => r.Reason).Distinct();
+        var rejections = importResults.SelectMany(r => r.ImportDecision.Rejections).ToList();
+        var reasons = rejections.Select(r => r.Reason).Distinct();
+        var messages = rejections.Select(r => r.Message).Distinct();
 
         _logger.Info("Download '{0}' can never be imported ({1}), marking as failed", trackedDownload.DownloadItem.Title, string.Join(", ", reasons));
-        trackedDownload.Fail();
+        trackedDownload.Fail($"Import rejected permanently: {string.Join("; ", messages)}");
     }
 }

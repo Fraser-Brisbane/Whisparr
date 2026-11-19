@@ -19,6 +19,9 @@ namespace NzbDrone.Core.Download.TrackedDownloads
         public bool IsTrackable { get; set; }
         public bool HasNotifiedManualInteractionRequired { get; set; }
 
+        // Why Whisparr failed the download; reported to the blocklist and history when set
+        public string FailureMessage { get; private set; }
+
         public TrackedDownload()
         {
             StatusMessages = Array.Empty<TrackedDownloadStatusMessage>();
@@ -40,6 +43,7 @@ namespace NzbDrone.Core.Download.TrackedDownloads
         {
             Status = TrackedDownloadStatus.Error;
             State = TrackedDownloadState.FailedPending;
+            FailureMessage = message;
 
             // Set CanBeRemoved to allow the failed item to be removed from the client
             DownloadItem.CanBeRemoved = true;
