@@ -5,6 +5,8 @@ using FluentAssertions;
 using Moq;
 using NUnit.Framework;
 using NzbDrone.Core.Download;
+using NzbDrone.Core.Download.TrackedDownloads;
+using NzbDrone.Core.IndexerSearch.Definitions;
 using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.MediaFiles.MovieImport;
 using NzbDrone.Core.MediaFiles.MovieImport.Aggregation;
@@ -229,6 +231,70 @@ namespace NzbDrone.Core.Test.MediaFiles.MovieImport
             Subject.GetImportDecisions(_videoFiles, _movie).Should().HaveCount(1);
 
             ExceptionVerification.ExpectedErrors(1);
+        }
+
+        private Movie GivenScene()
+        {
+            _movie.MovieMetadata.Value.ItemType = ItemType.Scene;
+
+            var refreshed = Builder<Movie>.CreateNew()
+                                          .With(e => e.Id = _movie.Id)
+                                          .With(e => e.Path = _movie.Path)
+                                          .With(e => e.QualityProfile = new QualityProfile { Items = Qualities.QualityFixture.GetDefaultQualities() })
+                                          .Build();
+            refreshed.MovieMetadata.Value.ItemType = ItemType.Scene;
+
+            Mocker.GetMock<IMovieService>()
+                  .Setup(s => s.GetMovie(_movie.Id))
+                  .Returns(refreshed);
+
+            return refreshed;
+        }
+
+        [Test]
+        public void should_evaluate_scene_against_the_refetched_movie()
+        {
+            var refreshed = GivenScene();
+            GivenSpecifications(_pass1);
+
+            var result = Subject.GetImportDecisions(_videoFiles, _movie);
+
+            result.Single().Approved.Should().BeTrue();
+            _pass1.Verify(c => c.IsSatisfiedBy(It.Is<LocalMovie>(l => l.Movie == refreshed), It.IsAny<DownloadClientItem>()), Times.Once());
+            Mocker.GetMock<IMovieService>().Verify(s => s.FindScene(It.IsAny<ParsedMovieInfo>(), It.IsAny<bool>(), It.IsAny<SearchCriteriaBase>()), Times.Never());
+        }
+
+        [Test]
+        public void should_return_specification_rejections_for_scene()
+        {
+            GivenScene();
+            GivenSpecifications(_pass1, _fail1, _fail2);
+
+            var result = Subject.GetImportDecisions(_videoFiles, _movie);
+
+            result.Single().Rejections.Select(r => r.Message).Should().BeEquivalentTo(new[] { "_fail1", "_fail2" });
+        }
+
+        [Test]
+        public void should_copy_indexer_flags_from_tracked_download_for_scene()
+        {
+            GivenScene();
+            GivenSpecifications(_pass1);
+
+            var downloadClientItem = Builder<DownloadClientItem>.CreateNew()
+                                                                .With(d => d.DownloadId = "abc")
+                                                                .Build();
+
+            Mocker.GetMock<ITrackedDownloadService>()
+                  .Setup(s => s.Find("abc"))
+                  .Returns(new TrackedDownload
+                  {
+                      RemoteMovie = new RemoteMovie { Release = new ReleaseInfo { IndexerFlags = IndexerFlags.G_Freeleech } }
+                  });
+
+            var result = Subject.GetImportDecisions(_videoFiles, _movie, downloadClientItem, null, false, true);
+
+            result.Single().LocalMovie.IndexerFlags.Should().Be(IndexerFlags.G_Freeleech);
         }
     }
 }

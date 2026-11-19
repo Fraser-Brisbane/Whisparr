@@ -243,21 +243,8 @@ namespace NzbDrone.Core.MediaFiles.MovieImport
 
                 _aggregationService.Augment(localMovie, downloadClientItem);
 
-                if (localMovie.Movie.MovieMetadata.Value.ItemType == ItemType.Movie)
-                {
-                    if (localMovie.Movie == null)
-                    {
-                        decision = new ImportDecision(localMovie, new ImportRejection(ImportRejectionReason.InvalidMovie, "Invalid movie"));
-                    }
-                    else
-                    {
-                        localMovie.CustomFormats = _formatCalculator.ParseCustomFormat(localMovie);
-                        localMovie.CustomFormatScore = localMovie.Movie.QualityProfile?.CalculateCustomFormatScore(localMovie.CustomFormats) ?? 0;
-
-                        decision = GetDecision(localMovie, downloadClientItem);
-                    }
-                }
-                else
+                // Both callers dereference the movie before getting here, so it is never null.
+                if (localMovie.Movie.MovieMetadata.Value.ItemType != ItemType.Movie)
                 {
                     if (downloadClientItem?.DownloadId.IsNotNullOrWhiteSpace() == true)
                     {
@@ -269,29 +256,14 @@ namespace NzbDrone.Core.MediaFiles.MovieImport
                         }
                     }
 
-                    var matchedMovie = new Movie();
-
-                    if (localMovie.Movie != null)
-                    {
-                        matchedMovie = _movieService.GetMovie(localMovie.Movie.Id);
-
-                        // Switch the movie so that the QualityProfile is populated
-                        localMovie.Movie = matchedMovie;
-                    }
-                    else
-                    {
-                        matchedMovie = _movieService.FindScene(fileMovieInfo);
-                        if (matchedMovie.Title != localMovie.Movie.Title)
-                        {
-                            decision = new ImportDecision(localMovie, new ImportRejection(ImportRejectionReason.UnknownMovie, "Movie title does not match identified scene title"));
-                        }
-                    }
-
-                    localMovie.CustomFormats = _formatCalculator.ParseCustomFormat(localMovie);
-                    localMovie.CustomFormatScore = localMovie.Movie.QualityProfile?.CalculateCustomFormatScore(localMovie.CustomFormats) ?? 0;
-
-                    decision = GetDecision(localMovie, downloadClientItem);
+                    // Switch the movie so that the QualityProfile is populated
+                    localMovie.Movie = _movieService.GetMovie(localMovie.Movie.Id);
                 }
+
+                localMovie.CustomFormats = _formatCalculator.ParseCustomFormat(localMovie);
+                localMovie.CustomFormatScore = localMovie.Movie.QualityProfile?.CalculateCustomFormatScore(localMovie.CustomFormats) ?? 0;
+
+                decision = GetDecision(localMovie, downloadClientItem);
 
                 if (localMovie.MediaProbeOutcome == MediaProbeOutcome.Corrupt)
                 {
