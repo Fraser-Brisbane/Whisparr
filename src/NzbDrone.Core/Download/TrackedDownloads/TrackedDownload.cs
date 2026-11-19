@@ -36,7 +36,7 @@ namespace NzbDrone.Core.Download.TrackedDownloads
             StatusMessages = statusMessages;
         }
 
-        public void Fail()
+        public void Fail(string message = null)
         {
             Status = TrackedDownloadStatus.Error;
             State = TrackedDownloadState.FailedPending;
